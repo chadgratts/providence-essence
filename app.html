@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Providence Essence</title>
+    <script src="https://cdn.jsdelivr.net/npm/rrweb@2.0.0-alpha.11/dist/rrweb.min.js"></script>
+    <style>
+      body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+      .section { margin: 24px 0; padding: 16px; border: 1px solid #ddd; border-radius: 8px; }
+      button { padding: 8px 16px; margin: 4px; cursor: pointer; }
+      input, textarea { padding: 8px; width: 100%; box-sizing: border-box; margin: 4px 0; }
+      #controls { position: fixed; top: 0; left: 0; right: 0; background: #111; color: #fff;
+      padding: 12px 20px; display: flex; justify-content: space-between; align-items: center;
+      z-index: 999; }
+      #event-count { font-family: monospace; }
+      .tall { height: 800px; background: linear-gradient(to bottom, #f0f0f0, #fff); padding: 20px; }
+    </style>
+  </head>
+  <body>
+    <div id="controls">
+      <span>rrweb recording... <span id="event-count">0</span> events</span>
+      <button id="stop-btn" onclick="stopAndSend()">Stop & Inspect</button>
+    </div>
+
+    <h1 style="margin-top: 60px;">Providence Essence</h1>
+
+    <div class="section">
+      <h2>Form Inputs</h2>
+      <input type="text" placeholder="Type something here..."/>
+      <textarea placeholder="And here..."></textarea>
+      <label><input type="checkbox" /> Check me</label>
+    </div>
+
+    <div class="section">
+      <h2>Buttons</h2>
+      <button onClick="document.getElementById('output').textContent = 'Clicked!'">Click me</button>
+      <button onclick="throw new Error('Intentional test error')">Throw Error</button>
+      <p id="output"></p>
+    </div>
+
+    <div class="section tall">
+      <h2>Scroll Zone</h2>
+      <p>Scroll down through this tall section to generate scroll events</p>
+    </div>
+
+    <script>
+      let events = [];
+
+      const stopFn = rrweb.record({
+        emit(event) {
+          events.push(event);
+          document.getElementById('event-count').textContent = events.length;
+        },
+      });
+
+      function stopAndSend() {
+        stopFn();
+        document.getElementById('stop-btn').disabled = true;
+        document.getElementById('stop-btn').textContent = 'Sending...';
+
+        fetch('/capture', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(events),
+        })
+          .then(res => res.json())
+          .then(data => {
+            document.getElementById('stop-btn').textContent = data.message;
+          });
+      }
+    </script>
+  </body>
+</html>
