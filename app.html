@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Providence Essence</title>
-    <script src="https://cdn.jsdelivr.net/npm/rrweb@2.0.0-alpha.11/dist/rrweb.min.js"></script>
     <style>
       body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
       .section { margin: 24px 0; padding: 16px; border: 1px solid #ddd; border-radius: 8px; }
@@ -20,7 +19,7 @@
   <body>
     <div id="controls" class="rr-block">
       <span>rrweb recording... <span id="event-count">0</span> events</span>
-      <button id="stop-btn" onclick="stopAndSend()">Stop & Inspect</button>
+      <button id="stop-btn">Stop & Inspect</button>
     </div>
 
     <h1 style="margin-top: 60px;">Providence Essence</h1>
@@ -43,32 +42,6 @@
       <h2>Scroll Zone</h2>
       <p>Scroll down through this tall section to generate scroll events</p>
     </div>
-
-    <script>
-      let events = [];
-
-      const stopFn = rrweb.record({
-        emit(event) {
-          events.push(event);
-          document.getElementById('event-count').textContent = events.length;
-        },
-      });
-
-      function stopAndSend() {
-        stopFn();
-        document.getElementById('stop-btn').disabled = true;
-        document.getElementById('stop-btn').textContent = 'Sending...';
-
-        fetch('/capture', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(events),
-        })
-          .then(res => res.json())
-          .then(data => {
-            document.getElementById('stop-btn').textContent = data.message;
-          });
-      }
-    </script>
+    <script type="module" src="/agent.js"></script>
   </body>
 </html>
