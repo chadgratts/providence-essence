@@ -2,3 +2,5 @@ node_modules/
 .claude
 captured-events.json
 processed-session.json
+summary.txt
+.env
