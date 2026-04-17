@@ -15,7 +15,7 @@ const openai = new OpenAI({
 
 async function summarizeSession(processed: unknown) {
   const completion = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
+    model: 'gpt-5-nano',
     messages: [
       {
         role: 'system',
@@ -38,20 +38,25 @@ app.get('/', (_req, res) => {
 });
 
 app.post('/capture', async (req, res) => {
-  const events = req.body;
-  console.log(`\nReceived ${events.length} raw events\n`);
+  try {
+    const events = req.body;
+    console.log(`\nReceived ${events.length} raw events\n`);
 
-  writeFileSync('captured-events.json', JSON.stringify(events, null, 2));
+    writeFileSync('captured-events.json', JSON.stringify(events, null, 2));
 
-  const preprocessor = new SessionPreprocessor();
-  const processed = preprocessor.process('lab-session', events);
+    const preprocessor = new SessionPreprocessor();
+    const processed = preprocessor.process('lab-session', events);
 
-  writeFileSync('processed-session.json', JSON.stringify(processed, null, 2));                                                                                       
+    writeFileSync('processed-session.json', JSON.stringify(processed, null, 2));                                                                                       
                              
-  const summary = await summarizeSession(processed);
-  writeFileSync('summary.txt', summary);
-  
-  res.json({ message: `Done — ${events.length} events processed` }); 
+    const summary = await summarizeSession(processed);
+    writeFileSync('summary.txt', summary);
+
+    res.json({ message: `Done — ${events.length} events processed` });
+  } catch (error) {
+    console.error('Failed to capture request', error);
+    res.status(500).json({ error: 'Failed to process session' });
+  }
 });
 
 app.listen(3000, () => {                                                                      
