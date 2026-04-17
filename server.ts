@@ -13,7 +13,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-async function summarizeSession(processed: unknown) {
+async function summarizeSession(session: unknown) {
   const completion = await openai.chat.completions.create({
     model: 'gpt-5-nano',
     messages: [
@@ -23,12 +23,14 @@ async function summarizeSession(processed: unknown) {
       },
       {
         role: 'user',
-        content: `Analyze this processed user session:\n\n${JSON.stringify(processed, null, 2)}`,
+        content: `Analyze this processed user session:\n\n${JSON.stringify(session, null, 2)}`,
       },
     ],
   });
   return completion.choices[0]?.message?.content?.trim() ?? '';
 };
+
+async function summarizeMultipleSessions(sessions:)
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(__dirname));
@@ -45,12 +47,12 @@ app.post('/capture', async (req, res) => {
     writeFileSync('captured-events.json', JSON.stringify(events, null, 2));
 
     const preprocessor = new SessionPreprocessor();
-    const processed = preprocessor.process('lab-session', events);
+    const session = preprocessor.process('lab-session', events);
 
-    writeFileSync('processed-session.json', JSON.stringify(processed, null, 2));                                                                                       
+    writeFileSync('processed-session.json', JSON.stringify(session, null, 2));                                                                                       
                              
-    const summary = await summarizeSession(processed);
-    writeFileSync('summary.txt', summary);
+    const summary = await summarizeSession(session);
+    writeFileSync(`/summaries/session-${Date.now()}.txt`, summary);
 
     res.json({ message: `Done — ${events.length} events processed` });
   } catch (error) {
