@@ -30,7 +30,7 @@ async function summarizeSession(session: object) {
   return completion.choices[0]?.message?.content?.trim() ?? '';
 };
 
-async function summarizeMultipleSessions(sessions: unknown[]) {
+async function summarizeMultipleSessions(sessions: string) {
     const completion = await openai.chat.completions.create({
     model: 'gpt-5-nano',
     messages: [
@@ -40,7 +40,7 @@ async function summarizeMultipleSessions(sessions: unknown[]) {
       },
       {
         role: 'user',
-        content: `Analyze these processed user sessions:\n\n${JSON.stringify(sessions, null, 2)}`,
+        content: `Analyze these processed user sessions:\n\n${sessions}`,
       },
     ],
   });
@@ -77,11 +77,22 @@ app.post('/capture', async (req, res) => {
 });
 
 app.post('/multi-summary', async (req, res) => {
-  const files = readdirSync('summaries');
-  const summaries = files.map(file => readFileSync(`summaries/${file}`, 'utf-8'))
-  const result = await summarizeMultipleSessions(summaries)
-  writeFileSync('multi-summary.txt', result);
-  res.sendStatus(200);
+  try {
+    const files = readdirSync('summaries');
+    const summaries = files
+      .map(file => {
+        const content = readFileSync(`summaries/${file}`, 'utf-8');
+        return `---SUMMARY START---\n${content}\n---SUMMARY END---`;
+      })
+      .join('\n');
+
+    const result = await summarizeMultipleSessions(summaries);
+    writeFileSync('multi-summary.txt', result);
+    res.sendStatus(200);
+  } catch (error) {
+    console.error('Failed to generate multi-summary', error);
+    res.status(500).json({ error: 'Failed to generate multi-summary' });
+  }
 });
 
 app.listen(3000, () => {                                                                      
