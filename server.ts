@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
-import { writeFileSync } from 'fs';
+import { readdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import OpenAI from 'openai';
@@ -13,7 +13,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-async function summarizeSession(session: unknown) {
+async function summarizeSession(session: object) {
   const completion = await openai.chat.completions.create({
     model: 'gpt-5-nano',
     messages: [
@@ -30,7 +30,22 @@ async function summarizeSession(session: unknown) {
   return completion.choices[0]?.message?.content?.trim() ?? '';
 };
 
-async function summarizeMultipleSessions(sessions:)
+async function summarizeMultipleSessions(sessions: unknown[]) {
+    const completion = await openai.chat.completions.create({
+    model: 'gpt-5-nano',
+    messages: [
+      {
+        role: 'system',
+        content: 'You are analyzing multiple processed user sessions. Provide an evidence-based analysis of the session. Clearly explain what can be inferred from the evidence, what remains uncertain or ambiguous, and what is likely noise or low-signal behavior. Do not overclaim, and ground your conclusions in the provided session data.', // i might change this to noto telling me what remains ambiguous/low-signal behavior
+      },
+      {
+        role: 'user',
+        content: `Analyze these processed user sessions:\n\n${JSON.stringify(sessions, null, 2)}`,
+      },
+    ],
+  });
+  return completion.choices[0]?.message?.content?.trim() ?? '';
+}
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(__dirname));
@@ -52,13 +67,21 @@ app.post('/capture', async (req, res) => {
     writeFileSync('processed-session.json', JSON.stringify(session, null, 2));                                                                                       
                              
     const summary = await summarizeSession(session);
-    writeFileSync(`/summaries/session-${Date.now()}.txt`, summary);
+    writeFileSync(`summaries/session-${Date.now()}.txt`, summary);
 
     res.json({ message: `Done — ${events.length} events processed` });
   } catch (error) {
     console.error('Failed to capture request', error);
     res.status(500).json({ error: 'Failed to process session' });
   }
+});
+
+app.post('/multi-summary', async (req, res) => {
+  const files = readdirSync('summaries');
+  const summaries = files.map(file => readFileSync(`summaries/${file}`, 'utf-8'))
+  const result = await summarizeMultipleSessions(summaries)
+  writeFileSync('multi-summary.txt', result);
+  res.sendStatus(200);
 });
 
 app.listen(3000, () => {                                                                      
