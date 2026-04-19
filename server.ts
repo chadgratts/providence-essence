@@ -63,7 +63,7 @@ Session summaries:
 `;
 
 const ChatbotSystemPrompt = {
-  role: 'system' as const,
+  role: "system" as const,
   content: `You are Providence, a session replay analysis assistant chatbot. Your role is to answer questions about user sessions based on session summaries from our database.
 
 Each summary contains:
@@ -73,18 +73,18 @@ Each summary contains:
 - Session outcomes
 - Device and location information
 
-Ground all answers in the provided summaries. Be concise (1-2 paragraphs) and specific. When relevant, cite session details. If patterns exist across multiple sessions, highlight them. If the summaries don't contain enough information to fully answer the question, acknowledge this limitation.`,
+Ground all answers in the provided summaries. Be concise (1-2 paragraphs) and specific. When relevant, cite session details. If patterns exist across multiple sessions, highlight them. If the summaries don't contain enough information to fully answer the question, acknowledge this limitation.`
 };
 
 const ChatbotUserPrompt = {
-  role: 'user' as const,
+  role: "user" as const,
   content: `Below are relevant session summaries from our database, ordered by relevance score. Each summary is delimited by markers.
 
 Use these summaries to answer the following question but NEVER say that you are using provided summaries. Instead, refer to them as existing or known sessions.
-`,
+`
 };
 
-async function embed(text: string): Promise<number[]> {
+async function embed(text: string) {
   const response = await openai.embeddings.create({
     model: 'text-embedding-3-small',
     input: text,
@@ -92,17 +92,13 @@ async function embed(text: string): Promise<number[]> {
   return response.data[0].embedding;
 }
 
-function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length) return 0;
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
+function cosineSimilarity(a: number[], b: number[]) {
+  let dot = 0, normA = 0, normB = 0;
   for (let i = 0; i < a.length; i++) {
     dot += a[i] * b[i];
     normA += a[i] * a[i];
     normB += b[i] * b[i];
   }
-  if (normA === 0 || normB === 0) return 0;
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
@@ -149,18 +145,11 @@ app.post('/capture', async (req, res) => {
 
     const summary = await summarizeSession(session);
     const sessionId = `session-${Date.now()}`;
-    const summaryPath = join(__dirname, 'summaries', `${sessionId}.txt`);
-    writeFileSync(summaryPath, summary);
-    console.log(`Wrote summary to ${summaryPath}`);
+    writeFileSync(join(__dirname, 'summaries', `${sessionId}.txt`), summary);
 
-    try {
-      const embedding = await embed(summary);
-      const embeddingPath = join(__dirname, 'summaries', `${sessionId}.embedding.json`);
-      writeFileSync(embeddingPath, JSON.stringify(embedding));
-      console.log(`Wrote embedding to ${embeddingPath}`);
-    } catch (embedErr) {
-      console.error('Failed to generate summary embedding', embedErr);
-    }
+    const embedding = await embed(summary);
+    writeFileSync(join(__dirname, 'summaries', `${sessionId}.embedding.json`), JSON.stringify(embedding));
+    console.log(`Wrote summary and embedding for ${sessionId}`);
 
     res.json({ message: `Done — ${events.length} events processed` });
   } catch (error) {
@@ -191,65 +180,36 @@ app.post('/multi-summary', async (req, res) => {
 
 app.post('/chatbot', async (req, res) => {
   try {
-    const { query } = req.body ?? {};
-    if (typeof query !== 'string' || query.trim().length === 0) {
-      return res.status(400).json({ error: 'Request body must include a non-empty "query" string' });
-    }
-
+    const { query } = req.body;
     const queryEmbedding = await embed(query);
 
     const summariesDir = join(__dirname, 'summaries');
-    const files = readdirSync(summariesDir).filter(f => f.endsWith('.embedding.json'));
-
-    const scored: { file: string; score: number; content: string }[] = [];
-    for (const embeddingFile of files) {
-      const base = embeddingFile.replace(/\.embedding\.json$/, '');
-      const summaryFile = `${base}.txt`;
-      const summaryPath = join(summariesDir, summaryFile);
-      try {
-        const content = readFileSync(summaryPath, 'utf-8');
-        const embedding = JSON.parse(readFileSync(join(summariesDir, embeddingFile), 'utf-8')) as number[];
-        const score = cosineSimilarity(queryEmbedding, embedding);
-        scored.push({ file: summaryFile, score, content });
-      } catch (err) {
-        console.warn(`Skipping ${embeddingFile}:`, err);
-      }
-    }
+    const scored = readdirSync(summariesDir)
+      .filter(f => f.endsWith('.embedding.json'))
+      .map(f => {
+        const embedding = JSON.parse(readFileSync(join(summariesDir, f), 'utf-8'));
+        const content = readFileSync(join(summariesDir, f.replace('.embedding.json', '.txt')), 'utf-8');
+        return { content, score: cosineSimilarity(queryEmbedding, embedding) };
+      });
 
     const top = scored
       .filter(s => s.score >= 0.3)
       .sort((a, b) => b.score - a.score)
       .slice(0, 3);
 
-    if (top.length === 0) {
-      return res.json({
-        answer: "I couldn't find any relevant sessions to answer that question.",
-        sources: [],
-      });
-    }
-
-    const delimited = top
-      .map(
-        s =>
-          `---SUMMARY START (score=${s.score.toFixed(3)}, file=${s.file})---\n${s.content}\n---SUMMARY END---`,
-      )
-      .join('\n\n');
-
-    const userContent = `${ChatbotUserPrompt.content}\n${delimited}\n\nQuestion: ${query}`;
+    const summaries = top
+      .map(s => `---SUMMARY START---\n${s.content}\n---SUMMARY END---`)
+      .join('\n');
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-5-nano',
       messages: [
         ChatbotSystemPrompt,
-        { role: 'user', content: userContent },
+        { role: 'user', content: ChatbotUserPrompt.content + summaries + `\n\nQuestion: ${query}` },
       ],
     });
 
-    const answer = completion.choices[0]?.message?.content?.trim() ?? '';
-    res.json({
-      answer,
-      sources: top.map(s => ({ file: s.file, score: s.score })),
-    });
+    res.json({ answer: completion.choices[0]?.message?.content?.trim() ?? '' });
   } catch (error) {
     console.error('Failed to handle chatbot request', error);
     res.status(500).json({ error: 'Failed to handle chatbot request' });
