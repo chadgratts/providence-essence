@@ -103,9 +103,7 @@ app.post('/capture', async (req, res) => {
 
     writeFileSync(join(__dirname, 'processed-session.json'), JSON.stringify(session, null, 2));
 
-    console.log('Calling OpenAI to summarize session...');
     const summary = await summarizeSession(session);
-    console.log(`OpenAI returned ${summary.length} chars`);
     const summaryPath = join(__dirname, 'summaries', `session-${Date.now()}.txt`);
     writeFileSync(summaryPath, summary);
     console.log(`Wrote summary to ${summaryPath}`);
