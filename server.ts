@@ -189,13 +189,16 @@ app.post('/chatbot', async (req, res) => {
       .map(f => {
         const embedding = JSON.parse(readFileSync(join(summariesDir, f), 'utf-8'));
         const content = readFileSync(join(summariesDir, f.replace('.embedding.json', '.txt')), 'utf-8');
-        return { content, score: cosineSimilarity(queryEmbedding, embedding) };
+        return { file: f, content, score: cosineSimilarity(queryEmbedding, embedding) };
       });
 
+    console.log('Chatbot scores:', scored.map(s => ({ file: s.file, score: s.score })));
+
     const top = scored
-      .filter(s => s.score >= 0.3)
       .sort((a, b) => b.score - a.score)
       .slice(0, 3);
+
+    console.log(`Chatbot selected ${top.length} summaries for query: "${query}"`);
 
     const summaries = top
       .map(s => `---SUMMARY START---\n${s.content}\n---SUMMARY END---`)
