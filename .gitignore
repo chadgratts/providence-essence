@@ -3,4 +3,5 @@ node_modules/
 captured-events.json
 processed-session.json
 summaries/
+multi-summary.txt
 .env
