@@ -184,24 +184,20 @@ app.post('/chatbot', async (req, res) => {
     const queryEmbedding = await embed(query);
 
     const summariesDir = join(__dirname, 'summaries');
-    const scored = readdirSync(summariesDir)
-      .filter(f => f.endsWith('.embedding.json'))
-      .map(f => {
-        const embedding = JSON.parse(readFileSync(join(summariesDir, f), 'utf-8'));
-        const content = readFileSync(join(summariesDir, f.replace('.embedding.json', '.txt')), 'utf-8');
-        return { file: f, content, score: cosineSimilarity(queryEmbedding, embedding) };
+    const scoredSummaries = readdirSync(summariesDir)
+      .filter(fileName => fileName.endsWith('.embedding.json'))
+      .map(embeddingFile => {
+        const embedding = JSON.parse(readFileSync(join(summariesDir, embeddingFile), 'utf-8'));
+        const summary = readFileSync(join(summariesDir, embeddingFile.replace('.embedding.json', '.txt')), 'utf-8');
+        return { file: embeddingFile, summary, score: cosineSimilarity(queryEmbedding, embedding) };
       });
 
-    console.log('Chatbot scores:', scored.map(s => ({ file: s.file, score: s.score })));
-
-    const top = scored
+    const top = scoredSummaries
       .sort((a, b) => b.score - a.score)
       .slice(0, 3);
 
-    console.log(`Chatbot selected ${top.length} summaries for query: "${query}"`);
-
     const summaries = top
-      .map(s => `---SUMMARY START---\n${s.content}\n---SUMMARY END---`)
+      .map(({ summary }) => `---SUMMARY START---\n${summary}\n---SUMMARY END---`)
       .join('\n');
 
     const completion = await openai.chat.completions.create({
