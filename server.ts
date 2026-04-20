@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
-import { dirname, join } from 'path';
+import { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { embed, cosineSimilarity, summarizeMultipleSessions, answerChatbotQuery } from './ai.js';
 import {
@@ -15,11 +15,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 
 app.use(express.json({ limit: '50mb' }));
-app.use(express.static(__dirname));
-
-app.get('/', (_req, res) => {
-  res.sendFile(join(__dirname, 'app.html'));
-});
+app.use(express.static(__dirname, { index: 'app.html' }));
 
 app.post('/capture', async (req, res) => {
   try {
