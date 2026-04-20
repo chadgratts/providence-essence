@@ -1,11 +1,15 @@
 import 'dotenv/config';
 import express from 'express';
-import { readdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { SessionPreprocessor } from '../session-replay-project/backend/src/preprocessor/SessionPreprocessor.js';
-import { ChatbotSystemPrompt, ChatbotUserPrompt } from './prompts.js';
-import { openai, embed, cosineSimilarity, summarizeSession, summarizeMultipleSessions } from './ai.js';
+import { embed, cosineSimilarity, summarizeMultipleSessions, answerChatbotQuery } from './ai.js';
+import {
+  processAndSaveSession,
+  loadAllSummaries,
+  saveMultiSummary,
+  loadSummariesWithEmbeddings,
+  wrapSummaries,
+} from './summaries.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -21,22 +25,8 @@ app.post('/capture', async (req, res) => {
   try {
     const events = req.body;
     console.log(`\nReceived ${events.length} raw events\n`);
-
-    writeFileSync(join(__dirname, 'captured-events.json'), JSON.stringify(events, null, 2));
-
-    const preprocessor = new SessionPreprocessor();
-    const session = preprocessor.process('lab-session', events);
-
-    writeFileSync(join(__dirname, 'processed-session.json'), JSON.stringify(session, null, 2));
-
-    const summary = await summarizeSession(session);
-    const sessionId = `session-${Date.now()}`;
-    writeFileSync(join(__dirname, 'summaries', `${sessionId}.txt`), summary);
-
-    const embedding = await embed(summary);
-    writeFileSync(join(__dirname, 'summaries', `${sessionId}.embedding.json`), JSON.stringify(embedding));
+    const sessionId = await processAndSaveSession(events);
     console.log(`Wrote summary and embedding for ${sessionId}`);
-
     res.json({ message: `Done — ${events.length} events processed` });
   } catch (error) {
     console.error('Failed to capture request', error);
@@ -44,19 +34,10 @@ app.post('/capture', async (req, res) => {
   }
 });
 
-app.post('/multi-summary', async (req, res) => {
+app.post('/multi-summary', async (_req, res) => {
   try {
-    const summariesDir = join(__dirname, 'summaries');
-    const files = readdirSync(summariesDir).filter(f => f.endsWith('.txt'));
-    const summaries = files
-      .map(file => {
-        const content = readFileSync(join(summariesDir, file), 'utf-8');
-        return `---SUMMARY START---\n${content}\n---SUMMARY END---`;
-      })
-      .join('\n');
-
-    const result = await summarizeMultipleSessions(summaries);
-    writeFileSync(join(__dirname, 'multi-summary.txt'), result);
+    const result = await summarizeMultipleSessions(loadAllSummaries());
+    saveMultiSummary(result);
     res.sendStatus(200);
   } catch (error) {
     console.error('Failed to generate multi-summary', error);
@@ -68,40 +49,19 @@ app.post('/chatbot', async (req, res) => {
   try {
     const { query } = req.body;
     const queryEmbedding = await embed(query);
-
-    const summariesDir = join(__dirname, 'summaries');
-    const scoredSummaries = readdirSync(summariesDir)
-      .filter(fileName => fileName.endsWith('.embedding.json'))
-      .map(embeddingFile => {
-        const embedding = JSON.parse(readFileSync(join(summariesDir, embeddingFile), 'utf-8'));
-        const summary = readFileSync(join(summariesDir, embeddingFile.replace('.embedding.json', '.txt')), 'utf-8');
-        return { file: embeddingFile, summary, score: cosineSimilarity(queryEmbedding, embedding) };
-      });
-
-    const top = scoredSummaries
+    const topMatches = loadSummariesWithEmbeddings()
+      .map(({ summary, embedding }) => ({ summary, score: cosineSimilarity(queryEmbedding, embedding) }))
       .sort((a, b) => b.score - a.score)
       .slice(0, 3);
-
-    const summaries = top
-      .map(({ summary }) => `---SUMMARY START---\n${summary}\n---SUMMARY END---`)
-      .join('\n');
-
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-5-nano',
-      messages: [
-        ChatbotSystemPrompt,
-        { role: 'user', content: ChatbotUserPrompt.content + summaries + `\n\nQuestion: ${query}` },
-      ],
-    });
-
-    res.json({ answer: completion.choices[0]?.message?.content?.trim() ?? '' });
+    const answer = await answerChatbotQuery(query, wrapSummaries(topMatches.map(match => match.summary)));
+    res.json({ answer });
   } catch (error) {
     console.error('Failed to handle chatbot request', error);
     res.status(500).json({ error: 'Failed to handle chatbot request' });
   }
 });
 
-app.listen(3000, () => {                                                                      
+app.listen(3000, () => {
   console.log('Lab running at http://localhost:3000');
-  console.log('Interact with the page, then click "Stop & Inspect"\n');                       
-}); 
+  console.log('Interact with the page, then click "Stop & Inspect"\n');
+});

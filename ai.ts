@@ -4,6 +4,8 @@ import {
   SessionUserPrompt,
   MultiSessionSystemPrompt,
   MultiSessionUserPrompt,
+  ChatbotSystemPrompt,
+  ChatbotUserPrompt,
 } from './prompts.js';
 
 export const openai = new OpenAI({
@@ -45,6 +47,17 @@ export async function summarizeMultipleSessions(sessions: string) {
     messages: [
       { role: 'system', content: MultiSessionSystemPrompt },
       { role: 'user', content: MultiSessionUserPrompt + sessions },
+    ],
+  });
+  return completion.choices[0]?.message?.content?.trim() ?? '';
+}
+
+export async function answerChatbotQuery(query: string, wrappedSummaries: string) {
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-5-nano',
+    messages: [
+      ChatbotSystemPrompt,
+      { role: 'user', content: ChatbotUserPrompt.content + wrappedSummaries + `\n\nQuestion: ${query}` },
     ],
   });
   return completion.choices[0]?.message?.content?.trim() ?? '';
