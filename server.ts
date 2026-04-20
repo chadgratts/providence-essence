@@ -20,9 +20,7 @@ app.use(express.static(__dirname, { index: 'app.html' }));
 app.post('/capture', async (req, res) => {
   try {
     const events = req.body;
-    console.log(`\nReceived ${events.length} raw events\n`);
     const sessionId = await processAndSaveSession(events);
-    console.log(`Wrote summary and embedding for ${sessionId}`);
     res.json({ message: `Done — ${events.length} events processed` });
   } catch (error) {
     console.error('Failed to capture request', error);
